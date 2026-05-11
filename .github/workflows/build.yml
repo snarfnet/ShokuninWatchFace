@@ -71,25 +71,29 @@ jobs:
           CODE_SIGN_STYLE=Automatic \
           DEVELOPMENT_TEAM=83VGKGSQUH
 
-    - name: Create IPA and Upload to App Store
+    - name: Inspect Archive and Upload
       run: |
         ARCHIVE=$RUNNER_TEMP/ShokuninWatchFace.xcarchive
-        echo "Archive contents:"
-        find "$ARCHIVE/Products" -name "*.app" -type d
-        # Find the .app bundle
-        APP_PATH=$(find "$ARCHIVE/Products" -name "*.app" -type d | head -1)
-        echo "App path: $APP_PATH"
-        IPA_DIR=$RUNNER_TEMP/ipa_staging
-        mkdir -p $IPA_DIR/Payload
-        cp -R "$APP_PATH" "$IPA_DIR/Payload/"
-        cd $IPA_DIR
-        zip -r $RUNNER_TEMP/ShokuninWatchFace.ipa Payload
-        echo "IPA created: $(ls -la $RUNNER_TEMP/ShokuninWatchFace.ipa)"
+        echo "=== Full archive structure ==="
+        find "$ARCHIVE" -maxdepth 4 -type d
+        echo "=== .app files ==="
+        find "$ARCHIVE" -name "*.app" -type d
+        echo "=== All files in Products ==="
+        find "$ARCHIVE/Products" -type f 2>/dev/null || echo "No Products dir"
+        echo "=== Try upload xcarchive directly ==="
         xcrun altool --upload-app \
-          -f $RUNNER_TEMP/ShokuninWatchFace.ipa \
+          -f "$ARCHIVE" \
           -t watchos \
           --apiKey WDXGY9WX55 \
-          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
+          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec || true
+        echo "=== Try upload via xcodebuild distribute ==="
+        xcodebuild -exportArchive \
+          -archivePath "$ARCHIVE" \
+          -exportOptionsPlist /dev/null \
+          -allowProvisioningUpdates \
+          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
+          -authenticationKeyID WDXGY9WX55 \
+          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec 2>&1 || true
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
