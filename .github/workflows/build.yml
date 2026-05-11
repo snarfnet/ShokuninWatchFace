@@ -74,23 +74,80 @@ jobs:
     - name: Upload to App Store
       run: |
         ARCHIVE=$RUNNER_TEMP/ShokuninWatchFace.xcarchive
-        echo "=== Archive contents ==="
+        echo "=== Archive root files ==="
+        ls -la "$ARCHIVE/"
+        echo "=== Archive Products ==="
         find "$ARCHIVE/Products" -type f 2>/dev/null || echo "No Products dir"
 
-        # Use xcodebuild distribute (Xcode 16+)
-        xcodebuild -distribute "$ARCHIVE" \
-          -distributionMethod "app-store-connect" \
+        # Create archive Info.plist if missing (needed for exportArchive)
+        if [ ! -f "$ARCHIVE/Info.plist" ]; then
+          echo "Archive Info.plist missing, creating..."
+          APP="$ARCHIVE/Products/Applications/ShokuninWatchFace.app"
+          BUNDLE_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
+          SHORT_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+          cat > "$ARCHIVE/Info.plist" << AIPLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>ApplicationProperties</key>
+          <dict>
+            <key>ApplicationPath</key>
+            <string>Applications/ShokuninWatchFace.app</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.snarfnet.shokuninwatchface</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${SHORT_VER}</string>
+            <key>CFBundleVersion</key>
+            <string>${BUNDLE_VER}</string>
+            <key>Team</key>
+            <string>83VGKGSQUH</string>
+          </dict>
+          <key>ArchiveVersion</key>
+          <integer>2</integer>
+          <key>Name</key>
+          <string>ShokuninWatchFace</string>
+          <key>SchemeName</key>
+          <string>ShokuninWatchFace</string>
+        </dict>
+        </plist>
+        AIPLIST
+          echo "Created archive Info.plist"
+        fi
+
+        # Try exportArchive with app-store method
+        cat > $RUNNER_TEMP/ExportOptions.plist << 'PLIST'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>teamID</key>
+            <string>83VGKGSQUH</string>
+            <key>destination</key>
+            <string>upload</string>
+            <key>uploadSymbols</key>
+            <true/>
+        </dict>
+        </plist>
+        PLIST
+
+        xcodebuild -exportArchive \
+          -archivePath "$ARCHIVE" \
+          -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+          -exportPath $RUNNER_TEMP/export \
           -allowProvisioningUpdates \
           -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
           -authenticationKeyID WDXGY9WX55 \
           -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec 2>&1 || {
-          echo "xcodebuild -distribute failed, trying manual IPA + altool..."
+          echo "exportArchive failed, trying manual IPA + altool..."
           mkdir -p $RUNNER_TEMP/Payload
           cp -r "$ARCHIVE/Products/Applications/ShokuninWatchFace.app" $RUNNER_TEMP/Payload/
           cd $RUNNER_TEMP && zip -r ShokuninWatchFace.ipa Payload
           xcrun altool --upload-app \
             -f $RUNNER_TEMP/ShokuninWatchFace.ipa \
-            --type watchos \
+            --platform watchos \
             --apiKey WDXGY9WX55 \
             --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
         }
