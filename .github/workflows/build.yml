@@ -115,25 +115,7 @@ jobs:
           echo "Created archive Info.plist"
         fi
 
-        # Try exportArchive with app-store method
-        cat > $RUNNER_TEMP/ExportOptions.plist << 'PLIST'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>method</key>
-            <string>app-store</string>
-            <key>teamID</key>
-            <string>83VGKGSQUH</string>
-            <key>destination</key>
-            <string>upload</string>
-            <key>uploadSymbols</key>
-            <true/>
-        </dict>
-        </plist>
-        PLIST
-
-        # Use exportArchive with release-testing (only method available for watchOS)
+        # Export with release-testing (only valid method for watchOS), then upload via altool
         cat > $RUNNER_TEMP/ExportOptions.plist << 'PLIST'
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -144,9 +126,7 @@ jobs:
             <key>teamID</key>
             <string>83VGKGSQUH</string>
             <key>destination</key>
-            <string>upload</string>
-            <key>uploadSymbols</key>
-            <true/>
+            <string>export</string>
         </dict>
         </plist>
         PLIST
@@ -161,7 +141,25 @@ jobs:
           -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
         echo "=== Export result ==="
-        ls -la $RUNNER_TEMP/export/ 2>/dev/null || echo "No export directory"
+        ls -la $RUNNER_TEMP/export/
+
+        # Find the exported IPA and upload it
+        IPA=$(find $RUNNER_TEMP/export -name "*.ipa" | head -1)
+        echo "IPA: $IPA"
+
+        APP="$ARCHIVE/Products/Applications/ShokuninWatchFace.app"
+        BUNDLE_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
+        SHORT_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+
+        xcrun altool --upload-package \
+          "$IPA" \
+          -t watchos \
+          --apple-id 6768239247 \
+          --bundle-id com.snarfnet.shokuninwatchface \
+          --bundle-version "$BUNDLE_VER" \
+          --bundle-short-version-string "$SHORT_VER" \
+          --apiKey WDXGY9WX55 \
+          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
