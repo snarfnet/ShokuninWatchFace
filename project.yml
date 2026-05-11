@@ -26,16 +26,9 @@ targets:
         TARGETED_DEVICE_FAMILY: "4"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
-        GENERATE_INFOPLIST_FILE: NO
+        GENERATE_INFOPLIST_FILE: YES
         DEVELOPMENT_TEAM: 83VGKGSQUH
         CODE_SIGN_STYLE: Automatic
-    info:
-      path: ShokuninWatchFace/Info.plist
-      properties:
-        CFBundleName: 職人ウォッチフェイス
-        CFBundleDisplayName: 職人ウォッチフェイス
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleIconName: AppIcon
-        WKApplication: true
-        NSMotionUsageDescription: 角度計と水平器のためにモーションセンサーを使用します。
+        INFOPLIST_KEY_CFBundleDisplayName: 職人ウォッチフェイス
+        INFOPLIST_KEY_WKApplication: YES
+        INFOPLIST_KEY_NSMotionUsageDescription: 角度計と水平器のためにモーションセンサーを使用します。
