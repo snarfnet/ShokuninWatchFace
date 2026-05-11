@@ -147,17 +147,9 @@ jobs:
         IPA=$(find $RUNNER_TEMP/export -name "*.ipa" | head -1)
         echo "IPA: $IPA"
 
-        APP="$ARCHIVE/Products/Applications/ShokuninWatchFace.app"
-        BUNDLE_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
-        SHORT_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
-
-        xcrun altool --upload-package \
-          "$IPA" \
-          -t watchos \
-          --apple-id 6768239247 \
-          --bundle-id com.snarfnet.shokuninwatchface \
-          --bundle-version "$BUNDLE_VER" \
-          --bundle-short-version-string "$SHORT_VER" \
+        # Try upload-app first (auto-detect platform from exported IPA)
+        xcrun altool --upload-app \
+          -f "$IPA" \
           --apiKey WDXGY9WX55 \
           --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
