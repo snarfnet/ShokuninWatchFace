@@ -73,15 +73,18 @@ jobs:
 
     - name: Create IPA and Upload to App Store
       run: |
-        # Create IPA manually from xcarchive
         ARCHIVE=$RUNNER_TEMP/ShokuninWatchFace.xcarchive
+        echo "Archive contents:"
+        find "$ARCHIVE/Products" -name "*.app" -type d
+        # Find the .app bundle
+        APP_PATH=$(find "$ARCHIVE/Products" -name "*.app" -type d | head -1)
+        echo "App path: $APP_PATH"
         IPA_DIR=$RUNNER_TEMP/ipa_staging
         mkdir -p $IPA_DIR/Payload
-        cp -R "$ARCHIVE/Products/Applications/ShokuninWatchFace.app" "$IPA_DIR/Payload/"
+        cp -R "$APP_PATH" "$IPA_DIR/Payload/"
         cd $IPA_DIR
         zip -r $RUNNER_TEMP/ShokuninWatchFace.ipa Payload
         echo "IPA created: $(ls -la $RUNNER_TEMP/ShokuninWatchFace.ipa)"
-        # Upload via altool
         xcrun altool --upload-app \
           -f $RUNNER_TEMP/ShokuninWatchFace.ipa \
           -t watchos \
