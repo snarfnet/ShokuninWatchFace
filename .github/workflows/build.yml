@@ -143,43 +143,27 @@ jobs:
         echo "=== Export result ==="
         ls -la $RUNNER_TEMP/export/
 
-        # Find the exported IPA, strip UIDeviceFamily, re-pack
+        # Find the exported IPA
         IPA=$(find $RUNNER_TEMP/export -name "*.ipa" | head -1)
         echo "IPA: $IPA"
+        ls -la "$IPA"
 
-        # Remove UIDeviceFamily from IPA (altool rejects [4] for watchOS)
-        mkdir -p $RUNNER_TEMP/ipa_fix
-        cd $RUNNER_TEMP/ipa_fix
-        unzip -o "$IPA"
-        PLIST_PATH=$(find . -path "*/ShokuninWatchFace.app/Info.plist" | head -1)
-        echo "Before: $(plutil -p "$PLIST_PATH" | grep UIDeviceFamily)"
-        /usr/libexec/PlistBuddy -c "Delete :UIDeviceFamily" "$PLIST_PATH" 2>/dev/null || true
-        echo "After: $(plutil -p "$PLIST_PATH" | grep UIDeviceFamily || echo 'UIDeviceFamily removed')"
-        # Re-sign after plist modification
-        DIST_IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -1 | awk -F'"' '{print $2}')
-        APP_PATH=$(find . -name "ShokuninWatchFace.app" -type d | head -1)
-        codesign --force --sign "$DIST_IDENTITY" --preserve-metadata=identifier,entitlements "$APP_PATH"
-        # Re-create IPA
-        IPA=$RUNNER_TEMP/ShokuninWatchFace_fixed.ipa
-        zip -r "$IPA" Payload
-        echo "Fixed IPA: $IPA"
-        cd $RUNNER_TEMP
+        # Upload via iTMSTransporter (altool doesn't support watchOS standalone apps)
+        TRANSPORTER_PATH=$(find /Applications/Xcode*.app -name "iTMSTransporter" -type f 2>/dev/null | head -1)
+        echo "Transporter: $TRANSPORTER_PATH"
 
-        APP="$ARCHIVE/Products/Applications/ShokuninWatchFace.app"
-        BUNDLE_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
-        SHORT_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
-        echo "Uploading v${SHORT_VER} (${BUNDLE_VER})"
-
-        # watchOS apps go through iOS App Store, try -t ios
-        xcrun altool --upload-package \
-          "$IPA" \
-          -t ios \
-          --apple-id 6768239247 \
-          --bundle-id com.snarfnet.shokuninwatchface \
-          --bundle-version "$BUNDLE_VER" \
-          --bundle-short-version-string "$SHORT_VER" \
-          --apiKey WDXGY9WX55 \
-          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
+        if [ -n "$TRANSPORTER_PATH" ]; then
+          "$TRANSPORTER_PATH" -m upload \
+            -assetFile "$IPA" \
+            -apiKey WDXGY9WX55 \
+            -apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
+        else
+          # Fallback: try xcrun iTMSTransporter
+          xcrun iTMSTransporter -m upload \
+            -assetFile "$IPA" \
+            -apiKey WDXGY9WX55 \
+            -apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
+        fi
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
