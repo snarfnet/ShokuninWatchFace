@@ -21,7 +21,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.snarfnet.shokuninwatchface
         MARKETING_VERSION: 1.0
         CURRENT_PROJECT_VERSION: 1
-        INFOPLIST_FILE: ShokuninWatchFace/Info.plist
         SWIFT_VERSION: 5.9
         TARGETED_DEVICE_FAMILY: "4"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
