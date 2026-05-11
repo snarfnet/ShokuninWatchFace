@@ -36,8 +36,8 @@ jobs:
 
     - name: Import Distribution Certificate
       env:
-        CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
-        CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        CERTIFICATE_BASE64: ${{ secrets.DIST_CERT_BASE64 }}
+        CERTIFICATE_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
       run: |
         CERT_PATH=$RUNNER_TEMP/certificate.p12
         KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
@@ -51,7 +51,7 @@ jobs:
 
     - name: Set up ASC API Key
       env:
-        ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
+        ASC_KEY_BASE64: ${{ secrets.ASC_API_KEY_CONTENT }}
       run: |
         mkdir -p ~/private_keys
         echo -n "$ASC_KEY_BASE64" | base64 --decode > ~/private_keys/AuthKey_WDXGY9WX55.p8
