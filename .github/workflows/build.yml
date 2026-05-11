@@ -115,8 +115,34 @@ jobs:
           echo "Created archive Info.plist"
         fi
 
-        # Export with release-testing (only valid method for watchOS), then upload via altool
+        # Upload directly to App Store Connect via exportArchive
         cat > $RUNNER_TEMP/ExportOptions.plist << 'PLIST'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>83VGKGSQUH</string>
+            <key>destination</key>
+            <string>upload</string>
+        </dict>
+        </plist>
+        PLIST
+
+        xcodebuild -exportArchive \
+          -archivePath "$ARCHIVE" \
+          -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+          -exportPath $RUNNER_TEMP/export \
+          -allowProvisioningUpdates \
+          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
+          -authenticationKeyID WDXGY9WX55 \
+          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec 2>&1 || {
+          echo "=== app-store-connect failed, trying release-testing export + altool ==="
+
+          # Fallback: export IPA with release-testing, then upload with altool
+          cat > $RUNNER_TEMP/ExportOptions2.plist << 'PLIST2'
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
@@ -129,41 +155,34 @@ jobs:
             <string>export</string>
         </dict>
         </plist>
-        PLIST
+        PLIST2
 
-        xcodebuild -exportArchive \
-          -archivePath "$ARCHIVE" \
-          -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
-          -exportPath $RUNNER_TEMP/export \
-          -allowProvisioningUpdates \
-          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
-          -authenticationKeyID WDXGY9WX55 \
-          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE" \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions2.plist \
+            -exportPath $RUNNER_TEMP/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
+            -authenticationKeyID WDXGY9WX55 \
+            -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
-        echo "=== Export result ==="
-        ls -la $RUNNER_TEMP/export/
+          IPA_ORIG=$(find $RUNNER_TEMP/export -name "*.ipa" | head -1)
+          IPA=$RUNNER_TEMP/ShokuninWatchFace.ipa
+          cp "$IPA_ORIG" "$IPA"
 
-        # Find the exported IPA
-        IPA=$(find $RUNNER_TEMP/export -name "*.ipa" | head -1)
-        echo "IPA: $IPA"
-        ls -la "$IPA"
-
-        # Upload via iTMSTransporter (altool doesn't support watchOS standalone apps)
-        TRANSPORTER_PATH=$(find /Applications/Xcode*.app -name "iTMSTransporter" -type f 2>/dev/null | head -1)
-        echo "Transporter: $TRANSPORTER_PATH"
-
-        if [ -n "$TRANSPORTER_PATH" ]; then
-          "$TRANSPORTER_PATH" -m upload \
-            -assetFile "$IPA" \
-            -apiKey WDXGY9WX55 \
-            -apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
-        else
-          # Fallback: try xcrun iTMSTransporter
-          xcrun iTMSTransporter -m upload \
-            -assetFile "$IPA" \
-            -apiKey WDXGY9WX55 \
-            -apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
-        fi
+          # Try altool with explicit --type watchos
+          xcrun altool --upload-package "$IPA" \
+            --type watchos \
+            --apiKey WDXGY9WX55 \
+            --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+            --verbose 2>&1 || {
+            echo "=== altool also failed, dumping IPA structure ==="
+            unzip -l "$IPA" | head -30
+            mkdir -p $RUNNER_TEMP/ipa_check && cd $RUNNER_TEMP/ipa_check
+            unzip -o "$IPA" "*/Info.plist"
+            find . -name "Info.plist" -exec plutil -p {} \;
+          }
+        }
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
