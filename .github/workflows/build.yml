@@ -133,39 +133,35 @@ jobs:
         </plist>
         PLIST
 
-        # Re-sign with distribution certificate
-        APP="$ARCHIVE/Products/Applications/ShokuninWatchFace.app"
-        DIST_IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -1 | awk -F'"' '{print $2}')
-        echo "Distribution identity: $DIST_IDENTITY"
-        if [ -n "$DIST_IDENTITY" ]; then
-          codesign --force --sign "$DIST_IDENTITY" --preserve-metadata=identifier,entitlements "$APP"
-          echo "Re-signed with distribution certificate"
-        else
-          echo "WARNING: No distribution identity found, using existing signing"
-        fi
+        # Use exportArchive with release-testing (only method available for watchOS)
+        cat > $RUNNER_TEMP/ExportOptions.plist << 'PLIST'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>release-testing</string>
+            <key>teamID</key>
+            <string>83VGKGSQUH</string>
+            <key>destination</key>
+            <string>upload</string>
+            <key>uploadSymbols</key>
+            <true/>
+        </dict>
+        </plist>
+        PLIST
 
-        # Create IPA from archive
-        mkdir -p $RUNNER_TEMP/Payload
-        cp -r "$APP" $RUNNER_TEMP/Payload/
-        cd $RUNNER_TEMP && zip -r ShokuninWatchFace.ipa Payload
-        echo "=== IPA created ==="
-        ls -la $RUNNER_TEMP/ShokuninWatchFace.ipa
+        xcodebuild -exportArchive \
+          -archivePath "$ARCHIVE" \
+          -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+          -exportPath $RUNNER_TEMP/export \
+          -allowProvisioningUpdates \
+          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
+          -authenticationKeyID WDXGY9WX55 \
+          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
-        # Use --upload-package which supports -t flag
-        APP="$ARCHIVE/Products/Applications/ShokuninWatchFace.app"
-        BUNDLE_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
-        SHORT_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
-        echo "Bundle: com.snarfnet.shokuninwatchface v${SHORT_VER} (${BUNDLE_VER})"
-
-        xcrun altool --upload-package \
-          $RUNNER_TEMP/ShokuninWatchFace.ipa \
-          -t watchos \
-          --apple-id 6768239247 \
-          --bundle-id com.snarfnet.shokuninwatchface \
-          --bundle-version "$BUNDLE_VER" \
-          --bundle-short-version-string "$SHORT_VER" \
-          --apiKey WDXGY9WX55 \
-          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
+        echo "=== Export result ==="
+        ls -la $RUNNER_TEMP/export/ 2>/dev/null || echo "No export directory"
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
