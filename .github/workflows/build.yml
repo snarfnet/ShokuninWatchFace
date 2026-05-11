@@ -140,25 +140,21 @@ jobs:
         echo "=== IPA created ==="
         ls -la $RUNNER_TEMP/ShokuninWatchFace.ipa
 
-        # Show altool help for debugging
-        xcrun altool --help 2>&1 | head -30 || true
+        # Use --upload-package which supports -t flag
+        APP="$ARCHIVE/Products/Applications/ShokuninWatchFace.app"
+        BUNDLE_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
+        SHORT_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+        echo "Bundle: com.snarfnet.shokuninwatchface v${SHORT_VER} (${BUNDLE_VER})"
 
-        # Try upload with -t ios (ASC treats watchOS as iOS)
-        echo "=== Trying altool -t ios ==="
-        xcrun altool --upload-app \
-          -f $RUNNER_TEMP/ShokuninWatchFace.ipa \
-          -t ios \
+        xcrun altool --upload-package \
+          $RUNNER_TEMP/ShokuninWatchFace.ipa \
+          -t watchos \
+          --apple-id 6768239247 \
+          --bundle-id com.snarfnet.shokuninwatchface \
+          --bundle-version "$BUNDLE_VER" \
+          --bundle-short-version-string "$SHORT_VER" \
           --apiKey WDXGY9WX55 \
-          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec 2>&1 || {
-          echo "=== -t ios failed, trying without -t ==="
-          xcrun altool --upload-app \
-            -f $RUNNER_TEMP/ShokuninWatchFace.ipa \
-            --apiKey WDXGY9WX55 \
-            --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec 2>&1 || {
-            echo "=== altool without -t also failed, trying xcrun iTMSTransporter ==="
-            xcrun iTMSTransporter --help 2>&1 | head -10 || true
-          }
-        }
+          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
