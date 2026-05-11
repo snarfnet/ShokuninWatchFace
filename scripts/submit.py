@@ -45,7 +45,7 @@ print(f'Export compliance: {r.status_code}')
 # Find version
 version_id = None
 version_state = None
-r = api('GET', f'/apps/{APP_ID}/appStoreVersions?filter[platform]=IOS&limit=1')
+r = api('GET', f'/apps/{APP_ID}/appStoreVersions?limit=1')
 data = r.json()
 if data.get('data'):
     version_id = data['data'][0]['id']
@@ -63,7 +63,7 @@ if not version_id or version_state in ('READY_FOR_DISTRIBUTION', 'READY_FOR_SALE
     r = api('POST', '/appStoreVersions', json={
         'data': {
             'type': 'appStoreVersions',
-            'attributes': {'platform': 'IOS', 'versionString': version_string},
+            'attributes': {'platform': 'IOS', 'versionString': version_string},  # IOS covers watchOS in ASC API
             'relationships': {'app': {'data': {'type': 'apps', 'id': APP_ID}}}
         }
     })
