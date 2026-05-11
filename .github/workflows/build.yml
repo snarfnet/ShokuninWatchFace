@@ -69,8 +69,7 @@ jobs:
           -authenticationKeyID WDXGY9WX55 \
           -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec \
           CODE_SIGN_STYLE=Automatic \
-          DEVELOPMENT_TEAM=83VGKGSQUH \
-          CODE_SIGN_IDENTITY="Apple Distribution"
+          DEVELOPMENT_TEAM=83VGKGSQUH
 
     - name: Upload to App Store
       run: |
@@ -134,9 +133,20 @@ jobs:
         </plist>
         PLIST
 
+        # Re-sign with distribution certificate
+        APP="$ARCHIVE/Products/Applications/ShokuninWatchFace.app"
+        DIST_IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -1 | awk -F'"' '{print $2}')
+        echo "Distribution identity: $DIST_IDENTITY"
+        if [ -n "$DIST_IDENTITY" ]; then
+          codesign --force --sign "$DIST_IDENTITY" --preserve-metadata=identifier,entitlements "$APP"
+          echo "Re-signed with distribution certificate"
+        else
+          echo "WARNING: No distribution identity found, using existing signing"
+        fi
+
         # Create IPA from archive
         mkdir -p $RUNNER_TEMP/Payload
-        cp -r "$ARCHIVE/Products/Applications/ShokuninWatchFace.app" $RUNNER_TEMP/Payload/
+        cp -r "$APP" $RUNNER_TEMP/Payload/
         cd $RUNNER_TEMP && zip -r ShokuninWatchFace.ipa Payload
         echo "=== IPA created ==="
         ls -la $RUNNER_TEMP/ShokuninWatchFace.ipa
