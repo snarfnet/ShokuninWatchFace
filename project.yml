@@ -41,7 +41,7 @@ targets:
         NSMotionUsageDescription: 角度計と水平器のためにモーションセンサーを使用します。
 
   ShokuninComplications:
-    type: appExtension
+    type: app-extension
     platform: watchOS
     deploymentTarget: "10.0"
     sources:
