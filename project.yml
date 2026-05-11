@@ -39,24 +39,3 @@ targets:
         CFBundleIconName: AppIcon
         WKApplication: true
         NSMotionUsageDescription: 角度計と水平器のためにモーションセンサーを使用します。
-
-  ShokuninComplications:
-    type: app-extension
-    platform: watchOS
-    deploymentTarget: "10.0"
-    sources:
-      - path: Complications
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.snarfnet.shokuninwatchface.complications
-        MARKETING_VERSION: 1.0
-        CURRENT_PROJECT_VERSION: 1
-        SWIFT_VERSION: 5.9
-        TARGETED_DEVICE_FAMILY: "4"
-        DEVELOPMENT_TEAM: 83VGKGSQUH
-        CODE_SIGN_STYLE: Automatic
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    dependencies:
-      - target: ShokuninWatchFace
-        embed: false
