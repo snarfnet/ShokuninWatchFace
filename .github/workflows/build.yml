@@ -71,32 +71,22 @@ jobs:
           CODE_SIGN_STYLE=Automatic \
           DEVELOPMENT_TEAM=83VGKGSQUH
 
-    - name: Export and Upload to App Store
+    - name: Create IPA and Upload to App Store
       run: |
-        cat > /tmp/export_options.plist << 'PLIST'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>method</key>
-          <string>app-store-connect</string>
-          <key>teamID</key>
-          <string>83VGKGSQUH</string>
-          <key>destination</key>
-          <string>upload</string>
-          <key>uploadSymbols</key>
-          <true/>
-        </dict>
-        </plist>
-        PLIST
-        xcodebuild -exportArchive \
-          -archivePath $RUNNER_TEMP/ShokuninWatchFace.xcarchive \
-          -exportOptionsPlist /tmp/export_options.plist \
-          -exportPath $RUNNER_TEMP/export \
-          -allowProvisioningUpdates \
-          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
-          -authenticationKeyID WDXGY9WX55 \
-          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec
+        # Create IPA manually from xcarchive
+        ARCHIVE=$RUNNER_TEMP/ShokuninWatchFace.xcarchive
+        IPA_DIR=$RUNNER_TEMP/ipa_staging
+        mkdir -p $IPA_DIR/Payload
+        cp -R "$ARCHIVE/Products/Applications/ShokuninWatchFace.app" "$IPA_DIR/Payload/"
+        cd $IPA_DIR
+        zip -r $RUNNER_TEMP/ShokuninWatchFace.ipa Payload
+        echo "IPA created: $(ls -la $RUNNER_TEMP/ShokuninWatchFace.ipa)"
+        # Upload via altool
+        xcrun altool --upload-app \
+          -f $RUNNER_TEMP/ShokuninWatchFace.ipa \
+          -t watchos \
+          --apiKey WDXGY9WX55 \
+          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
