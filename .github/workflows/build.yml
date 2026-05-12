@@ -142,17 +142,10 @@ jobs:
           echo "=== iTMSTransporter failed ($?), trying alternatives ==="
         fi
 
-        # Try Xcode 16 altool (different CLI API than Xcode 26)
+        # Xcode 16 altool uses subcommands (upload-package not --upload-package)
         if [ -n "$ALTOOL_16" ]; then
-          echo "=== Xcode 16 altool help ==="
-          "$ALTOOL_16" --help 2>&1 | head -30
-          echo "=== Trying Xcode 16 altool upload ==="
-          "$ALTOOL_16" --upload-app \
-            -f "$IPA" \
-            --apiKey WDXGY9WX55 \
-            --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
-            --verbose 2>&1 || \
-          "$ALTOOL_16" --upload-package "$IPA" \
+          echo "=== Trying Xcode 16 altool upload-package ==="
+          "$ALTOOL_16" upload-package "$IPA" \
             --type ios \
             --apple-id 6768239247 \
             --bundle-version $BUILD_NUM \
