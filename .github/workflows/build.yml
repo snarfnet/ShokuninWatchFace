@@ -144,14 +144,41 @@ jobs:
         echo "=== IPA found: $IPA ==="
         ls -la "$IPA"
 
-        # Upload to ASC - use --upload-app with --platform flag
-        # (altool --upload-app without --platform fails with "Cannot determine platform")
-        xcrun altool --upload-app \
-          -f "$IPA" \
-          --platform ios \
-          --apiKey WDXGY9WX55 \
-          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
-          --verbose 2>&1
+        # altool cannot upload standalone watchOS apps (ignores --platform flag)
+        # Try xcodebuild distribute (Xcode 16+ feature) first, fallback to Transporter
+        echo "=== Trying xcodebuild distribute ==="
+        xcodebuild distribute "$RUNNER_TEMP/ShokuninWatchFace.xcarchive" \
+          -method testflight \
+          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
+          -authenticationKeyID WDXGY9WX55 \
+          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec 2>&1 || {
+          echo "=== xcodebuild distribute failed, trying Transporter ==="
+          # Find and use iTMSTransporter directly
+          TRANSPORTER=$(find /Applications/Xcode*.app -name "iTMSTransporter" -path "*/bin/*" 2>/dev/null | head -1)
+          if [ -z "$TRANSPORTER" ]; then
+            TRANSPORTER=$(xcrun --find iTMSTransporter 2>/dev/null || true)
+          fi
+          echo "Transporter path: $TRANSPORTER"
+
+          if [ -n "$TRANSPORTER" ]; then
+            "$TRANSPORTER" -m upload \
+              -f "$IPA" \
+              -apiKey WDXGY9WX55 \
+              -apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+              -verbose 2>&1
+          else
+            echo "=== No transporter found, trying altool --upload-package ==="
+            # Last resort: altool --upload-package with watchos platform
+            xcrun altool --upload-package "$IPA" \
+              --type watchos \
+              --apple-id 6768239247 \
+              --bundle-version $BUILD_NUM \
+              --bundle-short-version-string 1.0 \
+              --apiKey WDXGY9WX55 \
+              --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+              --verbose 2>&1
+          fi
+        }
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
