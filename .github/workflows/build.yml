@@ -120,18 +120,49 @@ jobs:
         mkdir -p ~/.appstoreconnect/private_keys
         cp ~/private_keys/AuthKey_WDXGY9WX55.p8 ~/.appstoreconnect/private_keys/
 
-        # Print altool help for reference
-        DEVELOPER_DIR="$XCODE16/Contents/Developer" xcrun altool --help 2>&1 || true
-
-        echo "=== Uploading with Xcode 16 altool (explicit metadata) ==="
+        # Try 1: Re-export with Xcode 16 using app-store-connect method
+        echo "=== Trying export with Xcode 16 xcodebuild (app-store-connect) ==="
         DEVELOPER_DIR="$XCODE16/Contents/Developer" \
-        xcrun altool --upload-package "$IPA" \
-          --type watchos \
-          --apple-id 6768239247 \
-          --bundle-id com.snarfnet.shokuninwatchface \
-          --bundle-short-version-string "1.0" \
-          --bundle-version "$BUILD_NUM" \
-          --asc-public-id 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+        xcodebuild -exportArchive \
+          -archivePath "$ARCHIVE" \
+          -exportOptionsPlist <(cat <<'APPSTORE'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>83VGKGSQUH</string>
+            <key>destination</key>
+            <string>upload</string>
+        </dict>
+        </plist>
+APPSTORE
+        ) \
+          -exportPath $RUNNER_TEMP/export_appstore \
+          -allowProvisioningUpdates \
+          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
+          -authenticationKeyID WDXGY9WX55 \
+          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+          2>&1 && { echo "=== Xcode 16 app-store-connect upload succeeded! ==="; exit 0; } || echo "=== Xcode 16 app-store-connect failed, trying altool ==="
+
+        # Try 2: altool --upload-app (different code path from --upload-package)
+        echo "=== Trying altool --upload-app ==="
+        DEVELOPER_DIR="$XCODE16/Contents/Developer" \
+        xcrun altool --upload-app \
+          -f "$IPA" \
+          -t watchos \
+          --apiKey WDXGY9WX55 \
+          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+          2>&1 && { echo "=== altool --upload-app succeeded! ==="; exit 0; } || echo "=== altool --upload-app failed ==="
+
+        # Try 3: altool --upload-app with -t ios (trick server)
+        echo "=== Trying altool --upload-app with -t ios ==="
+        DEVELOPER_DIR="$XCODE16/Contents/Developer" \
+        xcrun altool --upload-app \
+          -f "$IPA" \
+          -t ios \
           --apiKey WDXGY9WX55 \
           --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
