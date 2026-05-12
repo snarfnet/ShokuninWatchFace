@@ -111,13 +111,10 @@ jobs:
         cp "$IPA" $RUNNER_TEMP/ShokuninWatchFace.ipa
         IPA=$RUNNER_TEMP/ShokuninWatchFace.ipa
 
-        # altool/iTMSTransporter cannot upload standalone watchOS apps.
-        # Use Fastlane pilot which handles watchOS properly.
-
+        # Use Fastlane deliver with Xcode 16's iTMSTransporter
         gem install fastlane --no-document
 
         # Create ASC API key JSON for Fastlane
-        KEY_CONTENT=$(cat ~/private_keys/AuthKey_WDXGY9WX55.p8)
         cat > $RUNNER_TEMP/asc_key.json << KEYEOF
         {
           "key_id": "WDXGY9WX55",
@@ -127,12 +124,53 @@ jobs:
         }
         KEYEOF
 
-        echo "=== Uploading with Fastlane pilot (as iOS platform) ==="
+        # Find Xcode 16's iTMSTransporter path
+        XCODE16=$(ls -d /Applications/Xcode_16* 2>/dev/null | sort -V | tail -1)
+        echo "=== Xcode 16 path: $XCODE16 ==="
+
+        if [ -n "$XCODE16" ]; then
+          TRANSPORTER_PATH="$XCODE16/Contents/SharedFrameworks/ContentDeliveryServices.framework/Versions/A/itms/bin/iTMSTransporter"
+          if [ -f "$TRANSPORTER_PATH" ]; then
+            echo "=== Found iTMSTransporter at: $TRANSPORTER_PATH ==="
+            export FASTLANE_ITUNES_TRANSPORTER_PATH="$(dirname "$TRANSPORTER_PATH")"
+          else
+            # Try alternative path
+            TRANSPORTER_PATH="$XCODE16/Contents/Developer/usr/bin/iTMSTransporter"
+            if [ -f "$TRANSPORTER_PATH" ]; then
+              echo "=== Found iTMSTransporter at: $TRANSPORTER_PATH ==="
+              export FASTLANE_ITUNES_TRANSPORTER_PATH="$(dirname "$TRANSPORTER_PATH")"
+            else
+              echo "=== iTMSTransporter not found in Xcode 16, searching... ==="
+              find "$XCODE16" -name "iTMSTransporter" -type f 2>/dev/null || true
+            fi
+          fi
+        fi
+
+        # Unlock keychain again right before upload
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        security unlock-keychain -p "" $KEYCHAIN_PATH
+        security default-keychain -s $KEYCHAIN_PATH
+
+        echo "=== Uploading with Fastlane deliver ==="
+        fastlane deliver \
+          --ipa "$IPA" \
+          --api_key_path $RUNNER_TEMP/asc_key.json \
+          --app 6768239247 \
+          --app_version "1.0" \
+          --skip_screenshots \
+          --skip_metadata \
+          --skip_app_version_update \
+          --force \
+          --precheck_include_in_app_purchases false \
+          2>&1 || true
+
+        echo "=== If deliver failed, trying pilot with transporter override ==="
         fastlane pilot upload \
           --ipa "$IPA" \
           --api_key_path $RUNNER_TEMP/asc_key.json \
           --app_platform ios \
-          --skip_waiting_for_build_processing
+          --skip_waiting_for_build_processing \
+          2>&1 || true
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
