@@ -111,66 +111,26 @@ jobs:
         cp "$IPA" $RUNNER_TEMP/ShokuninWatchFace.ipa
         IPA=$RUNNER_TEMP/ShokuninWatchFace.ipa
 
-        # Use Fastlane deliver with Xcode 16's iTMSTransporter
-        gem install fastlane --no-document
-
-        # Create ASC API key JSON for Fastlane
-        cat > $RUNNER_TEMP/asc_key.json << KEYEOF
-        {
-          "key_id": "WDXGY9WX55",
-          "issuer_id": "2be0734f-943a-4d61-9dc9-5d9045c46fec",
-          "key": $(python3 -c "import json; print(json.dumps(open('$HOME/private_keys/AuthKey_WDXGY9WX55.p8').read()))"),
-          "in_house": false
-        }
-        KEYEOF
-
-        # Find Xcode 16's iTMSTransporter path
+        # Upload via Xcode 16's altool with all metadata specified explicitly
+        # (Xcode 26 removed iTMSTransporter; Xcode 16's altool needs explicit args for Xcode 26 IPAs)
         XCODE16=$(ls -d /Applications/Xcode_16* 2>/dev/null | sort -V | tail -1)
         echo "=== Xcode 16 path: $XCODE16 ==="
 
-        if [ -n "$XCODE16" ]; then
-          TRANSPORTER_PATH="$XCODE16/Contents/SharedFrameworks/ContentDeliveryServices.framework/Versions/A/itms/bin/iTMSTransporter"
-          if [ -f "$TRANSPORTER_PATH" ]; then
-            echo "=== Found iTMSTransporter at: $TRANSPORTER_PATH ==="
-            export FASTLANE_ITUNES_TRANSPORTER_PATH="$(dirname "$TRANSPORTER_PATH")"
-          else
-            # Try alternative path
-            TRANSPORTER_PATH="$XCODE16/Contents/Developer/usr/bin/iTMSTransporter"
-            if [ -f "$TRANSPORTER_PATH" ]; then
-              echo "=== Found iTMSTransporter at: $TRANSPORTER_PATH ==="
-              export FASTLANE_ITUNES_TRANSPORTER_PATH="$(dirname "$TRANSPORTER_PATH")"
-            else
-              echo "=== iTMSTransporter not found in Xcode 16, searching... ==="
-              find "$XCODE16" -name "iTMSTransporter" -type f 2>/dev/null || true
-            fi
-          fi
-        fi
+        # Copy ASC API key for altool
+        mkdir -p ~/.appstoreconnect/private_keys
+        cp ~/private_keys/AuthKey_WDXGY9WX55.p8 ~/.appstoreconnect/private_keys/
 
-        # Unlock keychain again right before upload
-        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-        security unlock-keychain -p "" $KEYCHAIN_PATH
-        security default-keychain -s $KEYCHAIN_PATH
-
-        echo "=== Uploading with Fastlane deliver ==="
-        fastlane deliver \
-          --ipa "$IPA" \
-          --api_key_path $RUNNER_TEMP/asc_key.json \
-          --app 6768239247 \
-          --app_version "1.0" \
-          --skip_screenshots \
-          --skip_metadata \
-          --skip_app_version_update \
-          --force \
-          --precheck_include_in_app_purchases false \
-          2>&1 || true
-
-        echo "=== If deliver failed, trying pilot with transporter override ==="
-        fastlane pilot upload \
-          --ipa "$IPA" \
-          --api_key_path $RUNNER_TEMP/asc_key.json \
-          --app_platform ios \
-          --skip_waiting_for_build_processing \
-          2>&1 || true
+        echo "=== Uploading with Xcode 16 altool (explicit metadata) ==="
+        DEVELOPER_DIR="$XCODE16/Contents/Developer" \
+        xcrun altool upload-package \
+          -f "$IPA" \
+          -t watchos \
+          --apple-id 6768239247 \
+          --bundle-id com.snarfnet.shokuninwatchface \
+          --bundle-short-version-string "1.0" \
+          --bundle-version "$BUILD_NUM" \
+          --apiKey WDXGY9WX55 \
+          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
