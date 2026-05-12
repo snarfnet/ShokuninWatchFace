@@ -74,46 +74,10 @@ jobs:
     - name: Upload to App Store
       run: |
         ARCHIVE=$RUNNER_TEMP/ShokuninWatchFace.xcarchive
-        echo "=== Archive root files ==="
-        ls -la "$ARCHIVE/"
-        echo "=== Archive Products ==="
-        find "$ARCHIVE/Products" -type f 2>/dev/null || echo "No Products dir"
 
-        # Create archive Info.plist if missing (needed for exportArchive)
-        if [ ! -f "$ARCHIVE/Info.plist" ]; then
-          echo "Archive Info.plist missing, creating..."
-          APP="$ARCHIVE/Products/Applications/ShokuninWatchFace.app"
-          BUNDLE_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
-          SHORT_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
-          cat > "$ARCHIVE/Info.plist" << AIPLIST
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>ApplicationProperties</key>
-          <dict>
-            <key>ApplicationPath</key>
-            <string>Applications/ShokuninWatchFace.app</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.snarfnet.shokuninwatchface</string>
-            <key>CFBundleShortVersionString</key>
-            <string>${SHORT_VER}</string>
-            <key>CFBundleVersion</key>
-            <string>${BUNDLE_VER}</string>
-            <key>Team</key>
-            <string>83VGKGSQUH</string>
-          </dict>
-          <key>ArchiveVersion</key>
-          <integer>2</integer>
-          <key>Name</key>
-          <string>ShokuninWatchFace</string>
-          <key>SchemeName</key>
-          <string>ShokuninWatchFace</string>
-        </dict>
-        </plist>
-        AIPLIST
-          echo "Created archive Info.plist"
-        fi
+        # Restore login keychain to search list (cert import step removed it)
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        security list-keychains -d user -s $KEYCHAIN_PATH login.keychain-db
 
         # Export IPA with release-testing method
         cat > $RUNNER_TEMP/ExportOptions.plist << 'PLIST'
@@ -141,44 +105,38 @@ jobs:
           -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
         IPA=$(find $RUNNER_TEMP/export -name "*.ipa" | head -1)
-        echo "=== IPA found: $IPA ==="
-        ls -la "$IPA"
+        echo "=== IPA: $IPA ($(stat -f%z "$IPA") bytes) ==="
 
-        # altool cannot upload standalone watchOS apps (ignores --platform flag)
-        # Try xcodebuild distribute (Xcode 16+ feature) first, fallback to Transporter
-        echo "=== Trying xcodebuild distribute ==="
-        xcodebuild distribute "$RUNNER_TEMP/ShokuninWatchFace.xcarchive" \
-          -method testflight \
-          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
-          -authenticationKeyID WDXGY9WX55 \
-          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec 2>&1 || {
-          echo "=== xcodebuild distribute failed, trying Transporter ==="
-          # Find and use iTMSTransporter directly
-          TRANSPORTER=$(find /Applications/Xcode*.app -name "iTMSTransporter" -path "*/bin/*" 2>/dev/null | head -1)
-          if [ -z "$TRANSPORTER" ]; then
-            TRANSPORTER=$(xcrun --find iTMSTransporter 2>/dev/null || true)
-          fi
-          echo "Transporter path: $TRANSPORTER"
+        # Copy to ASCII filename to avoid potential encoding issues
+        cp "$IPA" $RUNNER_TEMP/ShokuninWatchFace.ipa
+        IPA=$RUNNER_TEMP/ShokuninWatchFace.ipa
 
-          if [ -n "$TRANSPORTER" ]; then
-            "$TRANSPORTER" -m upload \
-              -f "$IPA" \
-              -apiKey WDXGY9WX55 \
-              -apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
-              -verbose 2>&1
-          else
-            echo "=== No transporter found, trying altool --upload-package ==="
-            # Last resort: altool --upload-package with watchos platform
-            xcrun altool --upload-package "$IPA" \
-              --type watchos \
-              --apple-id 6768239247 \
-              --bundle-version $BUILD_NUM \
-              --bundle-short-version-string 1.0 \
-              --apiKey WDXGY9WX55 \
-              --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
-              --verbose 2>&1
-          fi
-        }
+        # Use iTMSTransporter from the SELECTED Xcode (26.3) to upload
+        XCODE_DEV=$(xcode-select -p)
+        echo "=== Xcode: $XCODE_DEV ==="
+
+        # Find iTMSTransporter in selected Xcode
+        TRANSPORTER=$(find "$XCODE_DEV/.." -name "iTMSTransporter" -path "*/bin/*" 2>/dev/null | head -1)
+        echo "=== Transporter: $TRANSPORTER ==="
+
+        # Set API key directory for transporter
+        export API_PRIVATE_KEYS_DIR=~/private_keys
+
+        if [ -n "$TRANSPORTER" ]; then
+          "$TRANSPORTER" -m upload \
+            -f "$IPA" \
+            -apiKey WDXGY9WX55 \
+            -apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+            -verbose 2>&1
+        else
+          echo "=== iTMSTransporter not found in selected Xcode, trying altool ==="
+          xcrun altool --upload-app \
+            -f "$IPA" \
+            -t watchos \
+            --apiKey WDXGY9WX55 \
+            --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+            --verbose 2>&1
+        fi
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
