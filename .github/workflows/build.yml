@@ -111,38 +111,25 @@ jobs:
         cp "$IPA" $RUNNER_TEMP/ShokuninWatchFace.ipa
         IPA=$RUNNER_TEMP/ShokuninWatchFace.ipa
 
-        # altool can't detect watchOS platform - likely because DTPlatformName
-        # is missing from the IPA's Info.plist after release-testing export.
-        # Inject platform metadata into the IPA if needed, then upload.
+        # altool has NO watchOS platform support (serverID/xmlID/platformCriteria all null).
+        # Workaround: inject LSRequiresIPhoneOS into IPA plist so altool detects it as iOS.
+        # Apple's server will recognize it as watchOS from UIDeviceFamily:[4].
 
-        echo "=== Checking IPA platform metadata ==="
         mkdir -p $RUNNER_TEMP/ipa_fix
         cd $RUNNER_TEMP/ipa_fix
         unzip -o "$IPA"
         APP_PLIST="Payload/ShokuninWatchFace.app/Info.plist"
 
-        # Show current platform fields
-        echo "=== Current Info.plist platform fields ==="
-        /usr/libexec/PlistBuddy -c "Print :DTPlatformName" "$APP_PLIST" 2>&1 || echo "DTPlatformName: MISSING"
-        /usr/libexec/PlistBuddy -c "Print :DTSDKName" "$APP_PLIST" 2>&1 || echo "DTSDKName: MISSING"
-        /usr/libexec/PlistBuddy -c "Print :UIDeviceFamily" "$APP_PLIST" 2>&1 || echo "UIDeviceFamily: MISSING"
-        /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP_PLIST" 2>&1 || echo "MinimumOSVersion: MISSING"
-        /usr/libexec/PlistBuddy -c "Print :WKApplication" "$APP_PLIST" 2>&1 || echo "WKApplication: MISSING"
+        echo "=== Adding LSRequiresIPhoneOS for altool iOS platform detection ==="
+        /usr/libexec/PlistBuddy -c "Add :LSRequiresIPhoneOS bool true" "$APP_PLIST" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Set :LSRequiresIPhoneOS true" "$APP_PLIST"
 
-        # Add DTPlatformName if missing (required for altool platform detection)
-        /usr/libexec/PlistBuddy -c "Print :DTPlatformName" "$APP_PLIST" 2>/dev/null || {
-          echo "=== Injecting watchOS platform metadata ==="
-          /usr/libexec/PlistBuddy -c "Add :DTPlatformName string watchos" "$APP_PLIST"
-          /usr/libexec/PlistBuddy -c "Add :DTPlatformVersion string 11.0" "$APP_PLIST"
-          /usr/libexec/PlistBuddy -c "Add :DTSDKName string watchos11.0" "$APP_PLIST"
-          # Re-create IPA
-          rm "$IPA"
-          zip -r "$IPA" Payload/
-          echo "=== IPA rebuilt with platform metadata ==="
-        }
+        # Rebuild IPA
+        rm "$IPA"
+        zip -r "$IPA" Payload/
         cd $RUNNER_TEMP
 
-        # Now try altool upload (should auto-detect watchOS platform)
+        echo "=== Uploading via altool (will detect as iOS) ==="
         xcrun altool --upload-app \
           -f "$IPA" \
           --apiKey WDXGY9WX55 \
