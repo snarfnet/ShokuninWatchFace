@@ -127,10 +127,11 @@ jobs:
         }
         KEYEOF
 
-        echo "=== Uploading with Fastlane pilot ==="
+        echo "=== Uploading with Fastlane pilot (as iOS platform) ==="
         fastlane pilot upload \
           --ipa "$IPA" \
           --api_key_path $RUNNER_TEMP/asc_key.json \
+          --app_platform ios \
           --skip_waiting_for_build_processing
 
     - name: Install PyJWT
