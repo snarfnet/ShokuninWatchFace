@@ -115,34 +115,8 @@ jobs:
           echo "Created archive Info.plist"
         fi
 
-        # Upload directly to App Store Connect via exportArchive
+        # Export IPA with release-testing, then upload with altool
         cat > $RUNNER_TEMP/ExportOptions.plist << 'PLIST'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>method</key>
-            <string>app-store-connect</string>
-            <key>teamID</key>
-            <string>83VGKGSQUH</string>
-            <key>destination</key>
-            <string>upload</string>
-        </dict>
-        </plist>
-        PLIST
-
-        xcodebuild -exportArchive \
-          -archivePath "$ARCHIVE" \
-          -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
-          -exportPath $RUNNER_TEMP/export \
-          -allowProvisioningUpdates \
-          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
-          -authenticationKeyID WDXGY9WX55 \
-          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec 2>&1 || {
-          echo "=== app-store-connect failed, trying release-testing export + altool ==="
-
-          # Fallback: export IPA with release-testing, then upload with altool
-          cat > $RUNNER_TEMP/ExportOptions2.plist << 'PLIST2'
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
@@ -155,33 +129,39 @@ jobs:
             <string>export</string>
         </dict>
         </plist>
-        PLIST2
+        PLIST
 
-          xcodebuild -exportArchive \
-            -archivePath "$ARCHIVE" \
-            -exportOptionsPlist $RUNNER_TEMP/ExportOptions2.plist \
-            -exportPath $RUNNER_TEMP/export \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
-            -authenticationKeyID WDXGY9WX55 \
-            -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec
+        xcodebuild -exportArchive \
+          -archivePath "$ARCHIVE" \
+          -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+          -exportPath $RUNNER_TEMP/export \
+          -allowProvisioningUpdates \
+          -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
+          -authenticationKeyID WDXGY9WX55 \
+          -authenticationKeyIssuerID 2be0734f-943a-4d61-9dc9-5d9045c46fec
 
-          IPA_ORIG=$(find $RUNNER_TEMP/export -name "*.ipa" | head -1)
-          IPA=$RUNNER_TEMP/ShokuninWatchFace.ipa
-          cp "$IPA_ORIG" "$IPA"
+        IPA_ORIG=$(find $RUNNER_TEMP/export -name "*.ipa" | head -1)
+        IPA=$RUNNER_TEMP/ShokuninWatchFace.ipa
+        cp "$IPA_ORIG" "$IPA"
 
-          # Try altool with explicit --type watchos
+        # Try altool with --platform flag (Xcode 26 uses --platform not --type)
+        xcrun altool --upload-package "$IPA" \
+          --platform watchos \
+          --apple-id 6768239247 \
+          --bundle-version $BUILD_NUM \
+          --bundle-short-version-string 1.0 \
+          --apiKey WDXGY9WX55 \
+          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+          --verbose 2>&1 || {
+          echo "=== --platform failed, trying --type ==="
           xcrun altool --upload-package "$IPA" \
             --type watchos \
+            --apple-id 6768239247 \
+            --bundle-version $BUILD_NUM \
+            --bundle-short-version-string 1.0 \
             --apiKey WDXGY9WX55 \
             --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
-            --verbose 2>&1 || {
-            echo "=== altool also failed, dumping IPA structure ==="
-            unzip -l "$IPA" | head -30
-            mkdir -p $RUNNER_TEMP/ipa_check && cd $RUNNER_TEMP/ipa_check
-            unzip -o "$IPA" "*/Info.plist"
-            find . -name "Info.plist" -exec plutil -p {} \;
-          }
+            --verbose 2>&1 || echo "=== Both failed ==="
         }
 
     - name: Install PyJWT
