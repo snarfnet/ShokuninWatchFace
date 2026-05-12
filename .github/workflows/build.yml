@@ -131,24 +131,26 @@ jobs:
         ALTOOL_16=$(find /Applications/Xcode_16*.app -name "altool" -path "*/SharedFrameworks/*" 2>/dev/null | sort -V | tail -1)
         echo "=== Xcode 16 altool: $ALTOOL_16 ==="
 
-        # Try iTMSTransporter first
+        # Set DEVELOPER_DIR to Xcode 16 so its tools can find their frameworks
+        XCODE16=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+        echo "=== Using Xcode 16: $XCODE16 ==="
+        export XCODE16_DEV="$XCODE16/Contents/Developer"
+
+        # Try iTMSTransporter with Xcode 16 context
         if [ -n "$TRANSPORTER" ]; then
-          echo "=== Trying iTMSTransporter ==="
-          "$TRANSPORTER" -m upload \
+          echo "=== Trying iTMSTransporter with DEVELOPER_DIR ==="
+          DEVELOPER_DIR="$XCODE16_DEV" "$TRANSPORTER" -m upload \
             -f "$IPA" \
             -apiKey WDXGY9WX55 \
             -apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
             -verbose 2>&1 && exit 0
-          echo "=== iTMSTransporter failed ($?), trying alternatives ==="
+          echo "=== iTMSTransporter failed, trying altool ==="
         fi
 
-        # Xcode 16 altool uses subcommands with different flags
+        # Try Xcode 16 altool with DEVELOPER_DIR set
         if [ -n "$ALTOOL_16" ]; then
-          echo "=== Xcode 16 altool upload-package help ==="
-          "$ALTOOL_16" upload-package --help 2>&1 || true
-
-          echo "=== Trying Xcode 16 altool upload-package with --platform ios ==="
-          "$ALTOOL_16" upload-package \
+          echo "=== Trying Xcode 16 altool with DEVELOPER_DIR ==="
+          DEVELOPER_DIR="$XCODE16_DEV" "$ALTOOL_16" upload-package \
             --apple-id 6768239247 \
             --bundle-version $BUILD_NUM \
             --bundle-short-version-string 1.0 \
