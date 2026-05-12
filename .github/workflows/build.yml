@@ -111,30 +111,56 @@ jobs:
         cp "$IPA" $RUNNER_TEMP/ShokuninWatchFace.ipa
         IPA=$RUNNER_TEMP/ShokuninWatchFace.ipa
 
-        # altool has NO watchOS platform support (serverID/xmlID/platformCriteria all null).
-        # Workaround: inject LSRequiresIPhoneOS into IPA plist so altool detects it as iOS.
-        # Apple's server will recognize it as watchOS from UIDeviceFamily:[4].
+        # altool has NO watchOS upload support (serverID/xmlID/platformCriteria all null).
+        # Use iTMSTransporter from Xcode 16 with full keychain access.
 
-        mkdir -p $RUNNER_TEMP/ipa_fix
-        cd $RUNNER_TEMP/ipa_fix
-        unzip -o "$IPA"
-        APP_PLIST="Payload/ShokuninWatchFace.app/Info.plist"
+        export API_PRIVATE_KEYS_DIR=~/private_keys
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-        echo "=== Adding LSRequiresIPhoneOS for altool iOS platform detection ==="
-        /usr/libexec/PlistBuddy -c "Add :LSRequiresIPhoneOS bool true" "$APP_PLIST" 2>/dev/null || \
-          /usr/libexec/PlistBuddy -c "Set :LSRequiresIPhoneOS true" "$APP_PLIST"
+        # Ensure keychains are fully accessible
+        security unlock-keychain -p "" $KEYCHAIN_PATH
+        security default-keychain -s $KEYCHAIN_PATH
+        security list-keychains -d user -s $KEYCHAIN_PATH login.keychain-db
+        security set-keychain-settings $KEYCHAIN_PATH
 
-        # Rebuild IPA
-        rm "$IPA"
-        zip -r "$IPA" Payload/
-        cd $RUNNER_TEMP
+        # Find iTMSTransporter from Xcode 16 (removed in Xcode 26)
+        TRANSPORTER=$(find /Applications/Xcode_16*.app -name "iTMSTransporter" -path "*/usr/bin/*" 2>/dev/null | sort -V | tail -1)
+        echo "=== Transporter: $TRANSPORTER ==="
 
-        echo "=== Uploading via altool (will detect as iOS) ==="
-        xcrun altool --upload-app \
-          -f "$IPA" \
-          --apiKey WDXGY9WX55 \
-          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
-          --verbose 2>&1
+        # Also find the altool from Xcode 16 SharedFrameworks
+        ALTOOL_16=$(find /Applications/Xcode_16*.app -name "altool" -path "*/SharedFrameworks/*" 2>/dev/null | sort -V | tail -1)
+        echo "=== Xcode 16 altool: $ALTOOL_16 ==="
+
+        # Try iTMSTransporter first
+        if [ -n "$TRANSPORTER" ]; then
+          echo "=== Trying iTMSTransporter ==="
+          "$TRANSPORTER" -m upload \
+            -f "$IPA" \
+            -apiKey WDXGY9WX55 \
+            -apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+            -verbose 2>&1 && exit 0
+          echo "=== iTMSTransporter failed ($?), trying alternatives ==="
+        fi
+
+        # Try Xcode 16 altool (different CLI API than Xcode 26)
+        if [ -n "$ALTOOL_16" ]; then
+          echo "=== Xcode 16 altool help ==="
+          "$ALTOOL_16" --help 2>&1 | head -30
+          echo "=== Trying Xcode 16 altool upload ==="
+          "$ALTOOL_16" --upload-app \
+            -f "$IPA" \
+            --apiKey WDXGY9WX55 \
+            --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+            --verbose 2>&1 || \
+          "$ALTOOL_16" --upload-package "$IPA" \
+            --type ios \
+            --apple-id 6768239247 \
+            --bundle-version $BUILD_NUM \
+            --bundle-short-version-string 1.0 \
+            --apiKey WDXGY9WX55 \
+            --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
+            --verbose 2>&1
+        fi
 
     - name: Install PyJWT
       run: pip3 install --break-system-packages PyJWT requests
