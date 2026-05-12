@@ -142,17 +142,20 @@ jobs:
           echo "=== iTMSTransporter failed ($?), trying alternatives ==="
         fi
 
-        # Xcode 16 altool uses subcommands (upload-package not --upload-package)
+        # Xcode 16 altool uses subcommands with different flags
         if [ -n "$ALTOOL_16" ]; then
+          echo "=== Xcode 16 altool upload-package help ==="
+          "$ALTOOL_16" upload-package --help 2>&1 || true
+
           echo "=== Trying Xcode 16 altool upload-package ==="
-          "$ALTOOL_16" upload-package "$IPA" \
-            --type ios \
+          "$ALTOOL_16" upload-package \
             --apple-id 6768239247 \
             --bundle-version $BUILD_NUM \
             --bundle-short-version-string 1.0 \
             --apiKey WDXGY9WX55 \
             --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
-            --verbose 2>&1
+            --verbose \
+            "$IPA" 2>&1
         fi
 
     - name: Install PyJWT
