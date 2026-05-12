@@ -115,28 +115,47 @@ jobs:
         mkdir -p ~/.appstoreconnect/private_keys
         cp ~/private_keys/AuthKey_WDXGY9WX55.p8 ~/.appstoreconnect/private_keys/
 
-        # Try Xcode 26's --upload-package (REST API, doesn't need iTMSTransporter)
-        echo "=== Trying Xcode 26 altool --upload-package ==="
-        xcrun altool --upload-package "$IPA" \
-          --type watchos \
-          --apple-id 6768239247 \
-          --bundle-id com.snarfnet.shokuninwatchface \
-          --bundle-short-version-string "1.0" \
-          --bundle-version "$BUILD_NUM" \
-          --asc-public-id 2be0734f-943a-4d61-9dc9-5d9045c46fec \
-          --apiKey WDXGY9WX55 \
-          --apiIssuer 2be0734f-943a-4d61-9dc9-5d9045c46fec \
-          2>&1 || true
+        # Patch IPA Info.plist to pass server-side validation
+        # Server rejects: UIDeviceFamily [4], DTPlatformName "watchos", missing armv7
+        # These are iOS validation rules incorrectly applied to watchOS uploads
+        PATCH_DIR=$RUNNER_TEMP/ipa_patch
+        mkdir -p $PATCH_DIR
+        cd $PATCH_DIR
+        unzip -q "$IPA"
 
-        echo "=== Checking if Xcode 26 altool has --upload-package ==="
-        xcrun altool --help 2>&1 | head -20 || true
+        APP_PATH=$(find Payload -name "*.app" -maxdepth 1 | head -1)
+        echo "=== App bundle: $APP_PATH ==="
+        echo "=== Original Info.plist ==="
+        plutil -p "$APP_PATH/Info.plist" | grep -E "(UIDeviceFamily|DTPlatformName|MinimumOSVersion|CFBundle)" || true
 
-        # Fallback: Xcode 16's --upload-package (which connected to server before)
-        XCODE16=$(ls -d /Applications/Xcode_16* 2>/dev/null | sort -V | tail -1)
-        echo "=== Fallback: Xcode 16 altool --upload-package ==="
-        DEVELOPER_DIR="$XCODE16/Contents/Developer" \
-        xcrun altool --upload-package "$IPA" \
-          --type watchos \
+        # Fix UIDeviceFamily: add iPhone (1) alongside Watch (4)
+        /usr/libexec/PlistBuddy -c "Delete :UIDeviceFamily" "$APP_PATH/Info.plist" 2>/dev/null || true
+        /usr/libexec/PlistBuddy -c "Add :UIDeviceFamily array" "$APP_PATH/Info.plist"
+        /usr/libexec/PlistBuddy -c "Add :UIDeviceFamily:0 integer 1" "$APP_PATH/Info.plist"
+        /usr/libexec/PlistBuddy -c "Add :UIDeviceFamily:1 integer 4" "$APP_PATH/Info.plist"
+
+        # Fix DTPlatformName
+        /usr/libexec/PlistBuddy -c "Set :DTPlatformName iphoneos" "$APP_PATH/Info.plist"
+
+        # Add LSRequiresIPhoneOS (needed for iOS platform detection)
+        /usr/libexec/PlistBuddy -c "Delete :LSRequiresIPhoneOS" "$APP_PATH/Info.plist" 2>/dev/null || true
+        /usr/libexec/PlistBuddy -c "Add :LSRequiresIPhoneOS bool true" "$APP_PATH/Info.plist"
+
+        # Set MinimumOSVersion to iOS-compatible value
+        /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 16.0" "$APP_PATH/Info.plist" 2>/dev/null || true
+
+        echo "=== Patched Info.plist ==="
+        plutil -p "$APP_PATH/Info.plist" | grep -E "(UIDeviceFamily|DTPlatformName|MinimumOSVersion|LSRequires)" || true
+
+        # Re-create IPA
+        PATCHED_IPA=$RUNNER_TEMP/ShokuninWatchFace_patched.ipa
+        zip -q -r "$PATCHED_IPA" Payload
+        echo "=== Patched IPA: $(stat -f%z "$PATCHED_IPA") bytes ==="
+        cd $RUNNER_TEMP
+
+        echo "=== Uploading patched IPA with --type ios ==="
+        xcrun altool --upload-package "$PATCHED_IPA" \
+          --type ios \
           --apple-id 6768239247 \
           --bundle-id com.snarfnet.shokuninwatchface \
           --bundle-short-version-string "1.0" \
