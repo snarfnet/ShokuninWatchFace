@@ -121,11 +121,7 @@ jobs:
         cp ~/private_keys/AuthKey_WDXGY9WX55.p8 ~/.appstoreconnect/private_keys/
 
         # Try 1: Re-export with Xcode 16 using app-store-connect method
-        echo "=== Trying export with Xcode 16 xcodebuild (app-store-connect) ==="
-        DEVELOPER_DIR="$XCODE16/Contents/Developer" \
-        xcodebuild -exportArchive \
-          -archivePath "$ARCHIVE" \
-          -exportOptionsPlist <(cat <<'APPSTORE'
+        cat > $RUNNER_TEMP/AppStoreExport.plist << 'APPSTORE'
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
@@ -138,8 +134,13 @@ jobs:
             <string>upload</string>
         </dict>
         </plist>
-APPSTORE
-        ) \
+        APPSTORE
+
+        echo "=== Trying export with Xcode 16 xcodebuild (app-store-connect + upload) ==="
+        DEVELOPER_DIR="$XCODE16/Contents/Developer" \
+        xcodebuild -exportArchive \
+          -archivePath "$ARCHIVE" \
+          -exportOptionsPlist $RUNNER_TEMP/AppStoreExport.plist \
           -exportPath $RUNNER_TEMP/export_appstore \
           -allowProvisioningUpdates \
           -authenticationKeyPath ~/private_keys/AuthKey_WDXGY9WX55.p8 \
